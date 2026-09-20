@@ -1,0 +1,468 @@
+// Prisma Schema for Blood Donation Management System
+// Target: PostgreSQL (or SQLite local fallback supported via connection string)
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  DONOR
+  PATIENT
+  LAB_TECH
+  HOSPITAL
+}
+
+enum BloodGroup {
+  A_POS
+  A_NEG
+  B_POS
+  B_NEG
+  AB_POS
+  AB_NEG
+  O_POS
+  O_NEG
+}
+
+enum ComponentType {
+  WHOLE_BLOOD
+  RED_CELLS
+  PLATELETS
+  PLASMA
+}
+
+enum BloodUnitStatus {
+  TESTING
+  APPROVED
+  AVAILABLE
+  RESERVED
+  ISSUED
+  EXPIRED
+  DISCARDED
+}
+
+enum TestStatus {
+  PENDING
+  PASSED
+  FAILED
+}
+
+enum EligibilityStatus {
+  ELIGIBLE
+  INELIGIBLE
+  DEFERRED
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum DonationStatus {
+  PENDING
+  COMPLETED
+  REJECTED
+}
+
+enum BloodRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FULFILLED
+  CANCELLED
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+  EMERGENCY
+}
+
+enum TransactionType {
+  BLOOD_REQUEST_PAYMENT
+  SERVICE_PAYMENT
+  REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum EmergencyStatus {
+  PENDING
+  CHECKING_STOCK
+  STOCK_AVAILABLE
+  LOW_STOCK
+  ALERT_SENT
+  DONORS_RESPONDING
+  FULFILLED
+  CANCELLED
+}
+
+enum ReportType {
+  DONATION
+  DONOR
+  BLOOD_BANK
+  BLOOD_REQUEST
+  EMERGENCY
+  APPOINTMENT
+  FINANCIAL
+  PAYMENT
+  LAB_TESTING
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  name          String
+  role          Role           @default(DONOR)
+  phone         String?
+  avatar        String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  administrator Administrator?
+  donor         Donor?
+  patient       Patient?
+  labTechnician LabTechnician?
+  hospital      Hospital?
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Administrator {
+  adminId     String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department  String?  @default("Operations")
+  permissions String?  @default("ALL")
+  createdAt   DateTime @default(now())
+
+  reports     Report[]
+
+  @@map("administrators")
+}
+
+model Hospital {
+  hospitalId    String   @id @default(cuid())
+  userId        String?  @unique
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name          String
+  licenseNumber String   @unique
+  address       String
+  city          String
+  contactNumber String
+  email         String   @unique
+  latitude      Float
+  longitude     Float
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  bloodBank           BloodBank?
+  labTechnicians      LabTechnician[]
+  appointments        Appointment[]
+  bloodDonations      BloodDonation[]
+  bloodRequests          BloodRequest[] @relation("FulfillingHospital")
+  outgoingHospitalRequests BloodRequest[] @relation("RequestingHospital")
+  emergencyDonations  EmergencyDonation[]
+
+  @@map("hospitals")
+}
+
+model BloodBank {
+  bloodBankId   String      @id @default(cuid())
+  name          String
+  hospitalId    String      @unique
+  hospital      Hospital    @relation(fields: [hospitalId], references: [hospitalId], onDelete: Cascade)
+  location      String
+  contactNumber String
+  status        String      @default("ACTIVE")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  bloodUnits    BloodUnit[]
+
+  @@map("blood_banks")
+}
+
+model Donor {
+  donorId           String            @id @default(cuid())
+  userId            String            @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bloodGroup        BloodGroup
+  dateOfBirth       DateTime
+  gender            String
+  weight            Float?
+  lastDonationDate  DateTime?
+  eligibilityStatus EligibilityStatus @default(ELIGIBLE)
+  latitude          Float?
+  longitude         Float?
+  address           String?
+  city              String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  appointments      Appointment[]
+  bloodDonations    BloodDonation[]
+  emergencyResponses EmergencyDonorResponse[]
+
+  @@map("donors")
+}
+
+model Patient {
+  patientId   String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth DateTime
+  gender      String
+  medicalId   String?  @unique
+  address     String?
+  city        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bloodRequests     BloodRequest[]
+  bloodTransactions BloodTransaction[]
+
+  @@map("patients")
+}
+
+model LabTechnician {
+  labTechId     String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hospitalId    String
+  hospital      Hospital @relation(fields: [hospitalId], references: [hospitalId], onDelete: Cascade)
+  licenseNumber String   @unique
+  qualification String?
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  testedUnits   BloodUnit[]
+
+  @@map("lab_technicians")
+}
+
+model Appointment {
+  appointmentId   String            @id @default(cuid())
+  donorId         String
+  donor           Donor             @relation(fields: [donorId], references: [donorId], onDelete: Cascade)
+  hospitalId      String
+  hospital        Hospital          @relation(fields: [hospitalId], references: [hospitalId], onDelete: Cascade)
+  appointmentDate DateTime
+  appointmentTime String
+  appointmentType String            @default("WHOLE_BLOOD")
+  status          AppointmentStatus @default(PENDING)
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  bloodDonation   BloodDonation?
+
+  @@map("appointments")
+}
+
+model BloodDonation {
+  donationId      String         @id @default(cuid())
+  donorId         String
+  donor           Donor          @relation(fields: [donorId], references: [donorId], onDelete: Cascade)
+  hospitalId      String
+  hospital        Hospital       @relation(fields: [hospitalId], references: [hospitalId], onDelete: Cascade)
+  appointmentId   String?        @unique
+  appointment     Appointment?   @relation(fields: [appointmentId], references: [appointmentId], onDelete: SetNull)
+  donationDate    DateTime       @default(now())
+  bloodGroup      BloodGroup
+  quantity        Int            @default(450) // ml
+  donationType    String         @default("WHOLE_BLOOD")
+  screeningStatus String         @default("PASSED")
+  donationStatus  DonationStatus @default(COMPLETED)
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  bloodUnits      BloodUnit[]
+
+  @@map("blood_donations")
+}
+
+model BloodUnit {
+  bloodUnitId     String          @id @default(cuid())
+  bloodBankId     String
+  bloodBank       BloodBank       @relation(fields: [bloodBankId], references: [bloodBankId], onDelete: Cascade)
+  donationId      String?
+  bloodDonation   BloodDonation?  @relation(fields: [donationId], references: [donationId], onDelete: SetNull)
+  bloodGroup      BloodGroup
+  componentType   ComponentType   @default(WHOLE_BLOOD)
+  collectionDate  DateTime        @default(now())
+  expiryDate      DateTime
+  quantity        Int             @default(450) // ml
+  status          BloodUnitStatus @default(TESTING)
+  testStatus      TestStatus      @default(PENDING)
+  storageLocation String          @default("Cold Room Rack A1")
+  
+  labTechId       String?
+  labTechnician   LabTechnician?  @relation(fields: [labTechId], references: [labTechId], onDelete: SetNull)
+  
+  // Lab Test screening markers
+  hivTest         String?         @default("NEGATIVE")
+  hbvTest         String?         @default("NEGATIVE")
+  hcvTest         String?         @default("NEGATIVE")
+  syphilisTest    String?         @default("NEGATIVE")
+  verifiedGroup   BloodGroup?
+  testNotes       String?
+  testedAt        DateTime?
+
+  requestId       String?
+  bloodRequest    BloodRequest?   @relation(fields: [requestId], references: [requestId], onDelete: SetNull)
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("blood_units")
+}
+
+model BloodRequest {
+  requestId            String             @id @default(cuid())
+  patientId            String?
+  patient              Patient?           @relation(fields: [patientId], references: [patientId], onDelete: Cascade)
+  hospitalId           String
+  hospital             Hospital           @relation("FulfillingHospital", fields: [hospitalId], references: [hospitalId], onDelete: Cascade)
+  requestingHospitalId String?
+  requestingHospital   Hospital?          @relation("RequestingHospital", fields: [requestingHospitalId], references: [hospitalId], onDelete: SetNull)
+  bloodGroup           BloodGroup
+  quantity             Int                @default(1) // Units
+  urgency              UrgencyLevel       @default(MEDIUM)
+  requestType          String             @default("PATIENT_REQUEST") // PATIENT_REQUEST or HOSPITAL_TRANSFER
+  reason               String
+  requestDate          DateTime           @default(now())
+  status               BloodRequestStatus @default(PENDING)
+  processedDate        DateTime?
+  notes                String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  bloodUnits    BloodUnit[]
+  transactions  BloodTransaction[]
+
+  @@map("blood_requests")
+}
+
+model BloodTransaction {
+  transactionId        String            @id @default(cuid())
+  requestId            String?
+  bloodRequest         BloodRequest?     @relation(fields: [requestId], references: [requestId], onDelete: SetNull)
+  patientId            String?
+  patient              Patient?          @relation(fields: [patientId], references: [patientId], onDelete: Cascade)
+  amount               Float
+  transactionDate      DateTime          @default(now())
+  transactionType      TransactionType   @default(BLOOD_REQUEST_PAYMENT)
+  transactionReference String            @unique
+  status               TransactionStatus @default(PENDING)
+  currency             String            @default("USD")
+  description          String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  payment              Payment?
+
+  @@map("blood_transactions")
+}
+
+model Payment {
+  paymentId        String           @id @default(cuid())
+  transactionId    String           @unique
+  bloodTransaction BloodTransaction @relation(fields: [transactionId], references: [transactionId], onDelete: Cascade)
+  amount           Float
+  paymentMethod    String           @default("CREDIT_CARD")
+  paymentProvider  String           @default("STRIPE")
+  paymentReference String           @unique
+  paymentDate      DateTime         @default(now())
+  status           PaymentStatus    @default(PENDING)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@map("payments")
+}
+
+model EmergencyDonation {
+  emergencyId     String            @id @default(cuid())
+  hospitalId      String
+  hospital        Hospital          @relation(fields: [hospitalId], references: [hospitalId], onDelete: Cascade)
+  bloodGroup      BloodGroup
+  quantityNeeded  Int
+  urgencyLevel    UrgencyLevel      @default(EMERGENCY)
+  reason          String
+  requestDate     DateTime          @default(now())
+  requiredDate    DateTime
+  status          EmergencyStatus   @default(PENDING)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  responses       EmergencyDonorResponse[]
+
+  @@map("emergency_donations")
+}
+
+model EmergencyDonorResponse {
+  id          String            @id @default(cuid())
+  emergencyId String
+  emergency   EmergencyDonation @relation(fields: [emergencyId], references: [emergencyId], onDelete: Cascade)
+  donorId     String
+  donor       Donor             @relation(fields: [donorId], references: [donorId], onDelete: Cascade)
+  status      String            @default("RESPONDED") // RESPONDED, ACCEPTED, DECLINED
+  notes       String?
+  createdAt   DateTime          @default(now())
+
+  @@unique([emergencyId, donorId])
+  @@map("emergency_donor_responses")
+}
+
+model Notification {
+  notificationId   String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  message          String
+  notificationType String   @default("INFO") // APPOINTMENT, REQUEST, EMERGENCY, STOCK, PAYMENT, LAB
+  isRead           Boolean  @default(false)
+  linkUrl          String?
+  createdAt        DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model Report {
+  reportId    String         @id @default(cuid())
+  adminId     String?
+  admin       Administrator? @relation(fields: [adminId], references: [adminId], onDelete: SetNull)
+  title       String
+  type        ReportType
+  filters     String?        // JSON string of applied filters
+  data        String         // JSON payload of generated report data
+  createdAt   DateTime       @default(now())
+
+  @@map("reports")
+}
