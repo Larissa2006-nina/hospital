@@ -2,8 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import BadgesAndImpact from '@/components/BadgesAndImpact';
+import PrivacySettingsCard from '@/components/PrivacySettingsCard';
+import CommunityLeaderboard from '@/components/CommunityLeaderboard';
 import { useAuth } from '@/context/AuthContext';
-import { Heart, Calendar, Droplet, MapPin, AlertTriangle, ArrowRight, Clock, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Heart, Calendar, Droplet, MapPin, Clock, CheckCircle2, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DonorDashboard() {
@@ -12,6 +15,13 @@ export default function DonorDashboard() {
   const [donations, setDonations] = useState([]);
   const [emergencies, setEmergencies] = useState([]);
   const [nearestHospital, setNearestHospital] = useState(null);
+  const [badgeData, setBadgeData] = useState({
+    earnedBadges: [],
+    lockedBadges: [],
+    leaderboard: [],
+    currentUser: null,
+    totalCompletedDonations: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,11 +30,12 @@ export default function DonorDashboard() {
 
   const fetchDonorData = async () => {
     try {
-      const [apptRes, donRes, emergRes, hospRes] = await Promise.all([
+      const [apptRes, donRes, emergRes, hospRes, badgeRes] = await Promise.all([
         fetch('/api/appointments'),
         fetch('/api/donations'),
         fetch('/api/emergency?active=true'),
         fetch('/api/hospitals'),
+        fetch('/api/donor/badges'),
       ]);
 
       if (apptRes.ok) {
@@ -45,6 +56,16 @@ export default function DonorDashboard() {
           setNearestHospital(hospData.hospitals[0]);
         }
       }
+      if (badgeRes.ok) {
+        const bData = await badgeRes.json();
+        setBadgeData({
+          earnedBadges: bData.currentDonorData?.earnedBadges || [],
+          lockedBadges: bData.currentDonorData?.lockedBadges || [],
+          leaderboard: bData.leaderboard || [],
+          currentUser: bData.currentDonorData?.user || user,
+          totalCompletedDonations: bData.currentDonorData?.totalCompletedDonations || 0,
+        });
+      }
     } catch (e) {
       console.error('Error fetching donor dashboard data:', e);
     } finally {
@@ -52,10 +73,8 @@ export default function DonorDashboard() {
     }
   };
 
-  // Eligibility Calculation: 90 days between donations
   const donor = user?.donor;
   const bloodGroupDisplay = donor?.bloodGroup?.replace('_', '+') || 'O+';
-  const isEligible = donor?.eligibilityStatus === 'ELIGIBLE';
 
   let daysRemaining = 0;
   if (donor?.lastDonationDate) {
@@ -243,8 +262,27 @@ export default function DonorDashboard() {
         </div>
       </div>
 
+      {/* Gamification System Section: Badges & Impact */}
+      <BadgesAndImpact
+        earnedBadges={badgeData.earnedBadges}
+        lockedBadges={badgeData.lockedBadges}
+        totalCompletedDonations={badgeData.totalCompletedDonations || donations.length}
+      />
+
+      {/* Privacy Controls Section */}
+      <PrivacySettingsCard
+        user={badgeData.currentUser || user}
+        onUpdate={() => fetchDonorData()}
+      />
+
+      {/* Community Honor Roll & Leaderboard */}
+      <CommunityLeaderboard
+        leaderboard={badgeData.leaderboard}
+        currentUserId={user?.id}
+      />
+
       {/* Recent Appointments & Donation History */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '32px' }}>
         {/* Appointments Card */}
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>

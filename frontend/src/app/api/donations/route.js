@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getAuthUserFromRequest } from '@/lib/auth';
+import { evaluateAndAwardBadges } from '@/app/actions/badges';
 
 // GET: List donations
 export async function GET(request) {
@@ -156,6 +157,9 @@ export async function POST(request) {
         },
       });
     }
+
+    // 8. Automatically evaluate & award any newly unlocked donor gamification badges
+    await evaluateAndAwardBadges(donorId);
 
     return NextResponse.json({
       success: true,

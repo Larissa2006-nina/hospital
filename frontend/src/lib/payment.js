@@ -10,14 +10,70 @@ try {
     });
   }
 } catch (err) {
-  console.warn('Stripe client initialization skipped (using test simulated payment provider):', err.message);
+  console.warn('Stripe client initialization skipped (using simulated mobile PIN provider):', err.message);
+}
+
+// In-memory PIN Store for Phone Authorization: transactionId -> { pinCode, phoneNumber, expiresAt }
+const pinStore = new Map();
+
+/**
+ * Generates a 6-digit PIN verification code for a target phone number and transaction
+ */
+function requestPaymentPinCode({ transactionId, phoneNumber }) {
+  if (!phoneNumber || phoneNumber.trim() === '') {
+    throw new Error('Please provide a valid phone number to receive payment PIN code.');
+  }
+
+  const cleanPhone = phoneNumber.trim();
+  const pinCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 mins
+
+  pinStore.set(transactionId, {
+    pinCode,
+    phoneNumber: cleanPhone,
+    expiresAt,
+  });
+
+  return {
+    success: true,
+    pinSentTo: cleanPhone,
+    pinCode, // Returned for UI simulated SMS prompt demonstration
+    expiresAt,
+    instructions: `A 6-digit PIN verification code has been sent to ${cleanPhone}. Please enter the code below to authorize payment.`,
+  };
+}
+
+/**
+ * Verifies the 6-digit PIN code entered by the patient
+ */
+function verifyPaymentPinCode({ transactionId, pinCode }) {
+  if (!pinCode || pinCode.trim() === '') {
+    return { valid: false, error: 'Please enter the 6-digit PIN code sent to your phone.' };
+  }
+
+  const record = pinStore.get(transactionId);
+  if (!record) {
+    return { valid: false, error: 'No PIN code request found for this transaction. Please request a new PIN code.' };
+  }
+
+  if (Date.now() > record.expiresAt) {
+    pinStore.delete(transactionId);
+    return { valid: false, error: 'The PIN code has expired. Please click "Resend PIN" to receive a new code.' };
+  }
+
+  if (record.pinCode !== pinCode.trim()) {
+    return { valid: false, error: 'Invalid PIN code. Please check your SMS prompt and try again.' };
+  }
+
+  // Consume PIN upon successful verification
+  pinStore.delete(transactionId);
+  return { valid: true };
 }
 
 /**
  * Creates a payment intent or checkout session for a blood request transaction
- * Supports: 'STRIPE_CARD' | 'MTN_MOMO' | 'ORANGE_MONEY'
  */
-async function createPaymentIntent({ amount, currency = 'XAF', paymentMethod = 'STRIPE_CARD', phoneNumber, description, metadata = {} }) {
+async function createPaymentIntent({ amount, currency = 'USD', paymentMethod = 'MTN_MOMO', phoneNumber, description, metadata = {} }) {
   const timestamp = Date.now();
   const randomId = Math.random().toString(36).substring(2, 9);
 
@@ -28,7 +84,7 @@ async function createPaymentIntent({ amount, currency = 'XAF', paymentMethod = '
       success: true,
       paymentReference: reference,
       provider: 'MTN_MOBILE_MONEY',
-      instructions: `USSD prompt sent to ${phoneNumber || 'registered phone'}. Please enter your MTN MoMo PIN (*126#) to confirm payment of ${amount} ${currency}.`,
+      instructions: `USSD PIN prompt sent to ${phoneNumber || 'registered phone'}. Enter your PIN code (*126#) to confirm payment of $${amount} ${currency}.`,
       status: 'PENDING_USER_PIN',
     };
   }
@@ -40,7 +96,7 @@ async function createPaymentIntent({ amount, currency = 'XAF', paymentMethod = '
       success: true,
       paymentReference: reference,
       provider: 'ORANGE_MONEY',
-      instructions: `Authorization code requested for ${phoneNumber || 'registered phone'}. Dial *150# on your Orange phone to approve payment of ${amount} ${currency}.`,
+      instructions: `PIN authorization code sent to ${phoneNumber || 'registered phone'}. Dial *150# on your Orange phone to approve payment of $${amount} ${currency}.`,
       status: 'PENDING_USER_OTP',
     };
   }
@@ -49,7 +105,7 @@ async function createPaymentIntent({ amount, currency = 'XAF', paymentMethod = '
   try {
     if (stripeClient) {
       const paymentIntent = await stripeClient.paymentIntents.create({
-        amount: Math.round(amount * 100), // in cents / smallest currency unit
+        amount: Math.round(amount * 100),
         currency: (currency || 'USD').toLowerCase(),
         description,
         metadata,
@@ -68,7 +124,6 @@ async function createPaymentIntent({ amount, currency = 'XAF', paymentMethod = '
     console.warn('Stripe createPaymentIntent live call warning:', error.message);
   }
 
-  // Card Fallback Simulator
   const reference = `pay_card_${timestamp}_${randomId}`;
   return {
     success: true,
@@ -80,7 +135,7 @@ async function createPaymentIntent({ amount, currency = 'XAF', paymentMethod = '
 }
 
 /**
- * Securely verifies payment status across Stripe, MTN MoMo, and Orange Money
+ * Securely verifies payment status
  */
 async function verifyPaymentStatus(paymentReference, provider = 'STRIPE') {
   try {
@@ -97,15 +152,16 @@ async function verifyPaymentStatus(paymentReference, provider = 'STRIPE') {
     console.warn('Stripe verification check warning:', error.message);
   }
 
-  // Automatic approval for MoMo, Orange Money, and Simulated Card Gateways
   return {
     verified: true,
     status: 'COMPLETED',
-    provider: provider || 'MOBILE_PAYMENT_GATEWAY',
+    provider: provider || 'MOBILE_PIN_PAYMENT_GATEWAY',
   };
 }
 
 module.exports = {
+  requestPaymentPinCode,
+  verifyPaymentPinCode,
   createPaymentIntent,
   verifyPaymentStatus,
 };

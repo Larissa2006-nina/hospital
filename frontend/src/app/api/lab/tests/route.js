@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getAuthUserFromRequest } from '@/lib/auth';
+import { evaluateAndAwardBadges } from '@/app/actions/badges';
 
 // GET: Fetch testing queue and completed tests
 export async function GET(request) {
@@ -133,6 +134,11 @@ export async function POST(request) {
           linkUrl: '/hospital/blood-bank',
         },
       });
+    }
+
+    // Evaluate badges if donation is associated
+    if (unit.bloodDonation?.donorId) {
+      await evaluateAndAwardBadges(unit.bloodDonation.donorId);
     }
 
     return NextResponse.json({

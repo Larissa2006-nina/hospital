@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import PrivacySettingsCard from '@/components/PrivacySettingsCard';
 import { useAuth } from '@/context/AuthContext';
-import { User, Heart, MapPin, CheckCircle, ShieldCheck } from 'lucide-react';
+import { User, CheckCircle } from 'lucide-react';
 
 export default function DonorProfilePage() {
   const { user, refreshUser } = useAuth();
@@ -25,18 +26,18 @@ export default function DonorProfilePage() {
 
   return (
     <DashboardLayout>
-      <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '780px', margin: '0 auto' }}>
         <div style={{ marginBottom: '24px' }}>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <User size={24} color="#dc2626" />
-            <span>Donor Profile & Medical Demographics</span>
+            <span>Donor Profile & Privacy Settings</span>
           </h1>
           <p style={{ fontSize: '14px', color: '#64748b' }}>
-            Manage your personal details, blood group registry, and emergency contact location.
+            Manage your personal details, blood group registry, and anonymity preferences.
           </p>
         </div>
 
-        <div className="card" style={{ padding: '32px' }}>
+        <div className="card" style={{ padding: '32px', marginBottom: '24px' }}>
           {saved && (
             <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', padding: '12px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
               <CheckCircle size={16} />
@@ -145,6 +146,9 @@ export default function DonorProfilePage() {
             </button>
           </form>
         </div>
+
+        {/* Privacy & Anonymity Settings Card */}
+        <PrivacySettingsCard user={user} onUpdate={() => refreshUser && refreshUser()} />
       </div>
     </DashboardLayout>
   );
