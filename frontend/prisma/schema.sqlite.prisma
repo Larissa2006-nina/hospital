@@ -62,12 +62,13 @@ model Hospital {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  bloodBank           BloodBank?
-  labTechnicians      LabTechnician[]
-  appointments        Appointment[]
-  bloodDonations      BloodDonation[]
-  bloodRequests       BloodRequest[]
-  emergencyDonations  EmergencyDonation[]
+  bloodBank                BloodBank?
+  labTechnicians           LabTechnician[]
+  appointments             Appointment[]
+  bloodDonations           BloodDonation[]
+  bloodRequests            BloodRequest[] @relation("FulfillingHospital")
+  outgoingHospitalRequests BloodRequest[] @relation("RequestingHospital")
+  emergencyDonations       EmergencyDonation[]
 
   @@map("hospitals")
 }
@@ -225,21 +226,24 @@ model BloodUnit {
 }
 
 model BloodRequest {
-  requestId     String   @id @default(cuid())
-  patientId     String
-  patient       Patient  @relation(fields: [patientId], references: [patientId], onDelete: Cascade)
-  hospitalId    String
-  hospital      Hospital @relation(fields: [hospitalId], references: [hospitalId], onDelete: Cascade)
-  bloodGroup    String
-  quantity      Int      @default(1)
-  urgency       String   @default("MEDIUM")
-  reason        String
-  requestDate   DateTime @default(now())
-  status        String   @default("PENDING")
-  processedDate DateTime?
-  notes         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  requestId            String   @id @default(cuid())
+  patientId            String?
+  patient              Patient? @relation(fields: [patientId], references: [patientId], onDelete: Cascade)
+  hospitalId           String
+  hospital             Hospital @relation("FulfillingHospital", fields: [hospitalId], references: [hospitalId], onDelete: Cascade)
+  requestingHospitalId String?
+  requestingHospital   Hospital? @relation("RequestingHospital", fields: [requestingHospitalId], references: [hospitalId], onDelete: SetNull)
+  bloodGroup           String
+  quantity             Int      @default(1)
+  urgency              String   @default("MEDIUM")
+  requestType          String   @default("PATIENT_REQUEST") // PATIENT_REQUEST or HOSPITAL_TRANSFER
+  reason               String
+  requestDate          DateTime @default(now())
+  status               String   @default("PENDING")
+  processedDate        DateTime?
+  notes                String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   bloodUnits    BloodUnit[]
   transactions  BloodTransaction[]
